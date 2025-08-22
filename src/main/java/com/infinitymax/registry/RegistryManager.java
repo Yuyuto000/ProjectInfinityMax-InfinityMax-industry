@@ -178,20 +178,29 @@ public class RegistryManager {
     // ====== ブロックエンティティ登録 ======
     private static void registerBlockEntities() {
 
-        // FluidPipe
-        BlockEntityType<FluidPipeBlockEntity> fluidPipeType = BlockEntityType.Builder
-                .of(FluidPipeBlockEntity::new, BLOCKS.get("fluid_pipe_block"))
-                .build(null);
-        FluidPipeBlockEntity.TYPE = fluidPipeType;
-        ProjectInfinityMaxAPI.registerBlockEntity("fluid_pipe_entity", fluidPipeType);
+        // FluidPipeBlockEntity, ElectricCableBlockEntity, MachineBlockEntity registrations are already present in your prior code.
+        // ここに追加する BE のTYPE生成例:
+        BlockEntityType<MachineBlockEntity> machineType =
+            BlockEntityType.Builder.of((pos, state) -> new MachineBlockEntity(pos, state, MachineBlock.Kind.CRUSHER),
+            /* machine blocks */ machineBlocks.toArray(new Block[0]))
+            .build(null);
+            MachineBlockEntity.TYPE = machineType;
+            ProjectInfinityMaxAPI.registerBlockEntity("machine_block_entity", machineType);
 
-        // ElectricCable
-        BlockEntityType<ElectricCableBlockEntity> cableType = BlockEntityType.Builder
-                .of(ElectricCableBlockEntity::new, BLOCKS.get("power_cable_block"))
-                .build(null);
-        ElectricCableBlockEntity.TYPE = cableType;
-        ProjectInfinityMaxAPI.registerBlockEntity("electric_cable_entity", cableType);
+        // Coal generator
+        BlockEntityType<CoalGeneratorBlockEntity> coalGenType = BlockEntityType.Builder.of(CoalGeneratorBlockEntity::new, BLOCKS.get("coal_generator_block")).build(null);
+            CoalGeneratorBlockEntity.TYPE = coalGenType;
+            ProjectInfinityMaxAPI.registerBlockEntity("coal_generator_entity", coalGenType);
 
+        // Transformer
+        BlockEntityType<TransformerBlockEntity> transType = BlockEntityType.Builder.of(TransformerBlockEntity::new, BLOCKS.get("transformer_block")).build(null);
+            TransformerBlockEntity.TYPE = transType;
+            ProjectInfinityMaxAPI.registerBlockEntity("transformer_entity", transType);
+
+        // Fluid tank
+        BlockEntityType<FluidTankBlockEntity> tankType = BlockEntityType.Builder.of(FluidTankBlockEntity::new, BLOCKS.get("tank_block")).build(null);
+            FluidTankBlockEntity.TYPE = tankType;
+            ProjectInfinityMaxAPI.registerBlockEntity("tank_entity", tankType);
         // MachineBlock を全て束ねて1つの BlockEntityType に
         List<Block> machineBlocks = new ArrayList<>();
         BLOCKS.forEach((id, b) -> { if (b instanceof MachineBlock) machineBlocks.add(b); });
