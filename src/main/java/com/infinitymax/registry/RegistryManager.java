@@ -3,7 +3,11 @@ package com.infinitymax.industry.registry;
 import com.infinitymax.api.ProjectInfinityMaxAPI;
 import com.infinitymax.industry.block.MachineBlock;
 import com.infinitymax.industry.blockentity.MachineBlockEntity;
-
+import com.infinitymax.industry.energy.ElectricCableBlock;
+import com.infinitymax.industry.energy.ElectricCableBlockEntity;
+import com.infinitymax.industry.fluid.FluidPipeBlock;
+import com.infinitymax.industry.fluid.FluidPipeBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -108,8 +112,6 @@ public class RegistryManager {
         addSimpleBlock("steel_frame_block");
         addSimpleBlock("reinforced_concrete_block");
         addSimpleBlock("insulation_block");
-        addSimpleBlock("pipe_block");           // 配管（将来は専用BEでもOK）
-        addSimpleBlock("cable_duct_block");     // ケーブルダクト
         addSimpleBlock("tank_block");           // タンク
         addSimpleBlock("industrial_chest");     // 大容量チェスト
 
@@ -158,6 +160,9 @@ public class RegistryManager {
         addMachine("superconductor_storage_block", MachineBlock.Kind.SUPERCONDUCTOR_STORAGE);
         addMachine("power_transmission_anchor_block", MachineBlock.Kind.POWER_TRANSMISSION_ANCHOR);
 
+        BLOCKS.put("fluid_pipe_block", new FluidPipeBlock());
+        BLOCKS.put("power_cable_block", new ElectricCableBlock());
+
         // 実登録
         BLOCKS.forEach(ProjectInfinityMaxAPI::registerBlock);
     }
@@ -172,6 +177,21 @@ public class RegistryManager {
 
     // ====== ブロックエンティティ登録 ======
     private static void registerBlockEntities() {
+
+        // FluidPipe
+        BlockEntityType<FluidPipeBlockEntity> fluidPipeType = BlockEntityType.Builder
+                .of(FluidPipeBlockEntity::new, BLOCKS.get("fluid_pipe_block"))
+                .build(null);
+        FluidPipeBlockEntity.TYPE = fluidPipeType;
+        ProjectInfinityMaxAPI.registerBlockEntity("fluid_pipe_entity", fluidPipeType);
+
+        // ElectricCable
+        BlockEntityType<ElectricCableBlockEntity> cableType = BlockEntityType.Builder
+                .of(ElectricCableBlockEntity::new, BLOCKS.get("power_cable_block"))
+                .build(null);
+        ElectricCableBlockEntity.TYPE = cableType;
+        ProjectInfinityMaxAPI.registerBlockEntity("electric_cable_entity", cableType);
+
         // MachineBlock を全て束ねて1つの BlockEntityType に
         List<Block> machineBlocks = new ArrayList<>();
         BLOCKS.forEach((id, b) -> { if (b instanceof MachineBlock) machineBlocks.add(b); });

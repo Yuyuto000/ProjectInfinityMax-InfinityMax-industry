@@ -5,23 +5,42 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import com.infinitymax.industry.energy.IElectricPort;
+import com.infinitymax.industry.energy.IElectricNode;
 
-public class MachineBlockEntity extends BlockEntity {
-    public static BlockEntityType<MachineBlockEntity> TYPE; // RegistryManagerで注入
-    public final MachineBlock.Kind kind;
-    private int progress;
+public class MachineBlockEntity extends BlockEntity implements IElectricNode, IElectricPort {
+    // 電力ポートの定格（例）
+    private double ratedV = 240.0;
+    private double ratedA = 40.0;
+    private double internalR = 0.5; // 機械の等価内部抵抗
+    private double terminalV = 0.0;
 
-    public MachineBlockEntity(BlockPos pos, BlockState state, MachineBlock.Kind kind) {
-        super(TYPE, pos, state);
-        this.kind = kind;
-        this.progress = 0;
+    // === IElectricNode ===
+    @Override public double getVoltageV() { return terminalV; }
+    @Override public double getInternalResistanceOhm() { return internalR; }
+    @Override public double getMaxIntakeA() { return ratedA; }
+    @Override public double getMaxOutputA() { return 0.0; } // 機械は電源ではない
+
+    @Override
+    public double pushPullCurrent(Level level, BlockPos pos, double requestedVoltageV, double requestedCurrentA) {
+        // 機械は受電のみ（＋方向）、負は拒否
+        if (requestedCurrentA < 0) return 0.0;
+        double allow = Math.min(requestedCurrentA, ratedA);
+        terminalV += (requestedVoltageV - terminalV) * 0.3;
+        // 実作業：受け取った電力で progress を進める
+        double watts = terminalV * allow; // 近似
+        progress += (int)Math.max(0, Math.floor(watts / 100.0)); // 例：100Wで1progress/tick
+        if (progress >= 200) progress = 0;
+        return allow;
     }
 
-    /** 超軽量サンプル処理（後でエネルギー/流体APIに繋ぐ） */
-    public void serverTick() {
-        // ここで kind によって処理を分岐可能
-        // 例: CRUSHERなら input -> output に進行、必要電力チェック等
-        progress++;
-        if (progress >= 20) progress = 0;
+    @Override public void markDirtyGraph() {}
+
+    // === IElectricPort ===
+    @Override public double requiredWorkJPerTick() { return 1200.0; } // 例：60W 相当
+    @Override public double acceptPowerVA(double voltageV, double maxCurrentA) {
+        return pushPullCurrent(level, worldPosition, voltageV, maxCurrentA);
     }
+    @Override public double ratedVoltageV() { return ratedV; }
+    @Override public double ratedCurrentA() { return ratedA; }
 }
