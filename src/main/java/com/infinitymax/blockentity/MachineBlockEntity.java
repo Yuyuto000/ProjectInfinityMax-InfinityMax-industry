@@ -2,26 +2,39 @@ package com.infinitymax.industry.blockentity;
 
 import com.infinitymax.industry.block.MachineBlock;
 import com.infinitymax.industry.tick.TickDispatcher;
+import com.infinitymax.industry.util.InventoryHelper;
+import com.infinitymax.industry.registry.RecipeRegistry;
 import com.infinitymax.industry.energy.IElectricNode;
 import com.infinitymax.industry.energy.IElectricPort;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.server.level.ServerLevel;
 
+/**
+ * 汎用マシン BE:
+ * - 2 input スロット (0/1)、1 output スロット (2)
+ * - RecipeRegistry からマッチするレシピを処理
+ * - 電力（Joule）を消費して進行する（joulesPerTick）
+ */
 public class MachineBlockEntity extends BlockEntity implements IElectricNode, IElectricPort {
 
-    public static BlockEntityType<MachineBlockEntity> TYPE; // RegistryManager が注入
+    public static BlockEntityType<MachineBlockEntity> TYPE; // 注入される
 
     public final MachineBlock.Kind kind;
-    private int progress;
 
-    // Energy internal (Joules)
+    private final ItemStack[] items = new ItemStack[] { ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY };
+    private int progress = 0;
+    private int progressRequired = 0;
+    private RecipeRegistry.Recipe currentRecipe = null;
+
+    // Joules storage
     private double storedJ = 0.0;
-    private double capacityJ = 200000.0; // 200kJ default capacity
+    private double capacityJ = 200000.0;
 
-    // electrical port / node params
+    // electrical params
     private double ratedV = 240.0;
     private double ratedA = 40.0;
     private double internalR = 0.5;
@@ -30,7 +43,6 @@ public class MachineBlockEntity extends BlockEntity implements IElectricNode, IE
     public MachineBlockEntity(BlockPos pos, BlockState state, MachineBlock.Kind kind) {
         super(TYPE, pos, state);
         this.kind = kind;
-        this.progress = 0;
         TickDispatcher.register(this);
     }
 
@@ -40,67 +52,100 @@ public class MachineBlockEntity extends BlockEntity implements IElectricNode, IE
         TickDispatcher.unregister(this);
     }
 
-    // ---------- serverTick (public, called by TickDispatcher) ----------
+    // ---------- core tick ----------
     public void serverTick() {
         if (level == null || level.isClientSide) return;
 
-        // simple passive drain to simulate work
-        // If stored energy is available, consume some per tick and advance progress
-        double requiredJ = requiredWorkJPerTick();
-        if (storedJ >= requiredJ) {
-            storedJ -= requiredJ;
-            progress++;
-            // do finishing action per kind
-            if (progress >= 200) {
+        // if no recipe, try to find one
+        if (currentRecipe == null) {
+            currentRecipe = RecipeRegistry.findMatching(items[0], items[1]);
+            if (currentRecipe != null) {
+                progressRequired = currentRecipe.ticks;
                 progress = 0;
-                // TODO: do output production (craft result) — implement later
             }
         }
+
+        if (currentRecipe != null) {
+            double needJ = currentRecipe.joulesPerTick;
+            // consume storedJ
+            if (storedJ >= needJ) {
+                storedJ -= needJ;
+                progress++;
+                if (progress >= progressRequired) {
+                    // try to output
+                    ItemStack out = currentRecipe.output.copy();
+                    if (InventoryHelper.canInsert(items[2], out, out.getMaxStackSize())) {
+                        InventoryHelper.insert(items, 2, out, out.getMaxStackSize());
+                        // consume inputs
+                        if (currentRecipe.inputA != null && !currentRecipe.inputA.isEmpty()) {
+                            InventoryHelper.extract(items, 0, currentRecipe.inputA.getCount());
+                        }
+                        if (currentRecipe.inputB != null && !currentRecipe.inputB.isEmpty()) {
+                            InventoryHelper.extract(items, 1, currentRecipe.inputB.getCount());
+                        }
+                    }
+                    // reset
+                    currentRecipe = null;
+                    progress = 0;
+                    progressRequired = 0;
+                }
+            } else {
+                // insufficient energy: wait, maybe request from network (ElectricNetwork will push)
+            }
+        }
+
+        // small passive loss
+        storedJ = Math.max(0.0, storedJ - 0.01);
     }
 
-    // ===== IElectricNode =====
+    // ========= IElectricNode =========
     @Override public double getVoltageV() { return terminalV; }
     @Override public double getInternalResistanceOhm() { return internalR; }
     @Override public double getMaxIntakeA() { return ratedA; }
-    @Override public double getMaxOutputA() { return 0.0; } // not a source
+    @Override public double getMaxOutputA() { return 0.0; }
 
     @Override
-    public double pushPullCurrent(net.minecraft.world.level.Level level, BlockPos pos, double requestedVoltageV, double requestedCurrentA) {
-        // Accept positive current (supply to machine)
-        if (requestedCurrentA <= 0.0) return 0.0;
-        double allowA = Math.min(requestedCurrentA, ratedA);
-        // calc delivered joules for one tick: V * A * (1/20)
-        double deliveredJ = requestedVoltageV * allowA / 20.0;
+    public double pushPullCurrent(net.minecraft.world.level.Level lvl, BlockPos pos, double requestedVoltageV, double requestedCurrentA) {
+        // accept positive current; return actual A accepted
+        if (requestedCurrentA <= 0) return 0.0;
+        double allow = Math.min(requestedCurrentA, ratedA);
+        double deliveredJ = requestedVoltageV * allow / 20.0; // Joules per tick
         storedJ = Math.min(capacityJ, storedJ + deliveredJ);
         terminalV += (requestedVoltageV - terminalV) * 0.3;
-        return allowA; // actual current accepted (A)
+        return allow;
     }
 
-    @Override
-    public void markDirtyGraph() {
-        // no-op for now
+    @Override public void markDirtyGraph() { /* no-op */ }
+
+    // ========= IElectricPort =========
+    @Override public double requiredWorkJPerTick() {
+        return currentRecipe == null ? 0.0 : currentRecipe.joulesPerTick;
     }
 
-    // ===== IElectricPort =====
-    @Override public double requiredWorkJPerTick() { return 240.0 / 20.0; } // example: 240W -> 12J/tick
     @Override
     public double acceptPowerVA(double voltageV, double maxCurrentA) {
         double acceptedA = pushPullCurrent(level, worldPosition, voltageV, maxCurrentA);
         return acceptedA;
     }
+
     @Override public double ratedVoltageV() { return ratedV; }
     @Override public double ratedCurrentA() { return ratedA; }
 
-    // Convenience for API adapter
-    public double receiveJoules(double j, boolean simulate) {
-        if (!simulate) storedJ = Math.min(capacityJ, storedJ + j);
-        return j;
+    // ===== persistence (very simple) =====
+    @Override
+    public void load(CompoundTag tag) {
+        super.load(tag);
+        // store minimal state for demo (not storing inventory here for brevity)
+        this.storedJ = tag.getDouble("storedJ");
     }
-    public double extractJoules(double j, boolean simulate) {
-        double can = Math.min(storedJ, j);
-        if (!simulate) storedJ -= can;
-        return can;
+
+    @Override
+    public void saveAdditional(CompoundTag tag) {
+        super.saveAdditional(tag);
+        tag.putDouble("storedJ", storedJ);
     }
-    public double getStoredJoules() { return storedJ; }
-    public double getCapacityJoules() { return capacityJ; }
+
+    // Inventory accessors for GUI / automation (simplified)
+    public ItemStack getSlot(int i) { return items[i]; }
+    public void setSlot(int i, ItemStack s) { items[i] = s; }
 }
