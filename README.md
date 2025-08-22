@@ -1,5 +1,4 @@
-
-Installation information
+Project:InfinityMax-InfinityMaxIndustory(PIM-IMI)
 =======
 
 This template repository can be directly cloned to get you started with a new
@@ -19,7 +18,19 @@ in the Minecraft codebase. These names are covered by a specific license. All mo
 license. For the latest license text, refer to the mapping file itself, or the reference copy here:
 https://github.com/NeoForged/NeoForm/blob/main/Mojang.md
 
-Additional Resources: 
+Developer Memo: 
 ==========
-Community Documentation: https://docs.neoforged.net/  
-NeoForged Discord: https://discord.neoforged.net/
+5) 追加・改変方法（増やす時はここだけ！）
+
+アイテムを増やす
+→ RegistryManager.registerItems() の addItem("your_id") を1行追加
+    ↓
+ブロック（非マシン）を増やす
+→ RegistryManager.registerBlocks() の addSimpleBlock("your_id") を1行追加
+    ↓
+機械ブロックを増やす
+    ↓
+MachineBlock.Kind に 列挙子 を1つ追加
+    ↓
+RegistryManager.registerBlocks() に addMachine("your_block_id", MachineBlock.Kind.YOUR_KIND) を追加
+→ 自動的に 同じ BlockEntityType に紐付きます（BEを個別化したい場合は別Typeを作るだけ）
