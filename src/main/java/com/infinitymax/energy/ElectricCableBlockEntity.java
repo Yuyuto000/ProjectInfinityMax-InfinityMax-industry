@@ -1,5 +1,6 @@
 package com.infinitymax.industry.energy;
 
+import com.infinitymax.industry.tick.TickDispatcher;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -7,19 +8,23 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public class ElectricCableBlockEntity extends BlockEntity implements IElectricNode {
 
-    // 素材に応じた値（例：銅ケーブル）
-    private double internalResistanceOhm = 0.02;  // 1ノード等価抵抗（距離近似）
-    private double maxCurrentA = 200.0;           // 許容電流
-    private double voltageV = 0.0;                // 見かけ電圧（近似）
-    private boolean dirtyGraph = true;
-
     public static net.minecraft.world.level.block.entity.BlockEntityType<ElectricCableBlockEntity> TYPE;
+
+    private double internalResistanceOhm = 0.02;
+    private double maxCurrentA = 200.0;
+    private double voltageV = 0.0;
 
     public ElectricCableBlockEntity(BlockPos pos, BlockState state) {
         super(TYPE, pos, state);
+        TickDispatcher.register(this);
     }
 
-    // ===== IElectricNode =====
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        TickDispatcher.unregister(this);
+    }
+
     @Override public double getVoltageV() { return voltageV; }
     @Override public double getInternalResistanceOhm() { return internalResistanceOhm; }
     @Override public double getMaxIntakeA() { return maxCurrentA; }
@@ -27,21 +32,18 @@ public class ElectricCableBlockEntity extends BlockEntity implements IElectricNo
 
     @Override
     public double pushPullCurrent(Level level, BlockPos pos, double requestedVoltageV, double requestedCurrentA) {
-        // 近似：見かけ電圧を目標に緩和、電流はクリップ
+        // 近似：緩和してクリップ
         double allowed = Math.min(Math.abs(requestedCurrentA), maxCurrentA);
         double sign = Math.signum(requestedCurrentA);
-        voltageV += (requestedVoltageV - voltageV) * 0.2; // 緩和
+        voltageV += (requestedVoltageV - voltageV) * 0.2;
         return sign * allowed;
     }
 
-    @Override
-    public void markDirtyGraph() { dirtyGraph = true; }
+    @Override public void markDirtyGraph() { /* no-op */ }
 
-    // ===== Tick（ローダ別のTickerから呼ぶ想定） =====
     public void serverTick() {
         if (level == null || level.isClientSide) return;
-        // 同一ネットを軽く回す（最大512ノード等）
+        // approximate network balance using ElectricNetwork.tick in industry.energy
         ElectricNetwork.tick(level, worldPosition, 1.0, 512);
-        dirtyGraph = false;
     }
 }
