@@ -2,14 +2,19 @@
   "type": "infinitymax:machine_recipe",
   "machine": "electrolyzer",
   "inputs": [
-    { "item": "water_bucket", "count": 1 }
+    { "item": "minecraft:water_bucket", "count": 1 }
   ],
   "outputs": [
-    { "item": "hydrogen_cell", "count": 2 },
-    { "item": "oxygen_bucket", "count": 1 }
+    { "item": "infinitymax:hydrogen_cell", "count": 2 },
+    { "item": "minecraft:bucket", "count": 1 }
   ],
   "ticks": 200,
   "joules_per_tick": 100.0,
-  "fluid_input": [{"fluid": "water", "amount": 1000}],
-  "fluid_output": [{"fluid": "hydrogen", "amount": 500}]
+  "fluid_input": [
+    { "fluid": "minecraft:water", "amount": 1000 }
+  ],
+  "fluid_output": [
+    { "fluid": "infinitymax:hydrogen", "amount": 500 },
+    { "fluid": "infinitymax:oxygen", "amount": 500 }
+  ]
 }
