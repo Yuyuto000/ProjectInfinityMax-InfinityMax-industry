@@ -1,0 +1,10 @@
+{
+  "type": "infinitymax:machine_recipe",
+  "machine": "CRUSHER",
+  "inputs": [
+    { "item": "minecraft:iron_ore", "count": 1 }
+  ],
+  "output": { "item": "infinitymax:iron_dust", "count": 1 },
+  "ticks": 160,
+  "joules_per_tick": 120.0
+}
