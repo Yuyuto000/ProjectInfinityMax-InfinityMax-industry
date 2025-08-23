@@ -7,7 +7,13 @@ import com.infinitymax.industry.energy.ElectricCableBlock;
 import com.infinitymax.industry.energy.ElectricCableBlockEntity;
 import com.infinitymax.industry.fluid.FluidPipeBlock;
 import com.infinitymax.industry.fluid.FluidPipeBlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityType;
+import com.infinitymax.industry.gui.machine.MachineMenu;
+import com.infinitymax.industry.recipe.RecipeBootstrap;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.inventory.SimpleContainer;
+import net.minecraft.world.inventory.SimpleContainerData;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -16,23 +22,33 @@ import net.minecraft.world.level.material.MapColor;
 
 import java.util.*;
 
-public class RegistryManager {
+import static com.infinitymax.industry.block.MachineBlock.Kind.*;
 
-    // ====== 保持用 ======
+public final class RegistryManager {
+
+    private RegistryManager(){}
+
+    // 保持
     private static final Map<String, Item> ITEMS = new LinkedHashMap<>();
     private static final Map<String, Block> BLOCKS = new LinkedHashMap<>();
 
-    // ====== 公開エントリポイント ======
+    // 公開エントリポイント
     public static void init() {
         registerItems();
         registerBlocks();
+        registerBlockItems();
         registerBlockEntities();
+        registerMenuTypes();
+
+        // レシピ初期登録（任意）
+        RecipeBootstrap.init();
+
         System.out.println("[InfinityMax-Industry] Registry done: items=" + ITEMS.size() + ", blocks=" + BLOCKS.size());
     }
 
-    // ====== アイテム登録 ======
+    // ========== アイテム ==========
     private static void registerItems() {
-        // 1) 基礎素材（素材系）
+        // …あなたのリストを addItem("id") でずらっと
         addItem("iron_plate");
         addItem("sheet_copper"); // copper plate
         addItem("steel_ingot");
@@ -98,125 +114,139 @@ public class RegistryManager {
         addItem("rail_freight_coupler");
         addItem("autonomous_car_key");
 
-        // 実登録
         ITEMS.forEach(ProjectInfinityMaxAPI::registerItem);
     }
+    private static void addItem(String id) { ITEMS.put(id, new Item(new Item.Properties())); }
 
-    private static void addItem(String id) {
-        ITEMS.put(id, new Item(new Item.Properties()));
-    }
-
-    // ====== ブロック登録 ======
+    // ========== ブロック ==========
     private static void registerBlocks() {
-        // 2) 構造ブロック（建築/基礎）
         addSimpleBlock("steel_frame_block");
         addSimpleBlock("reinforced_concrete_block");
         addSimpleBlock("insulation_block");
-        addSimpleBlock("tank_block");           // タンク
-        addSimpleBlock("industrial_chest");     // 大容量チェスト
+        addSimpleBlock("tank_block");
+        addSimpleBlock("industrial_chest");
 
-        // 3) 加工・製造機械（軽工業） → MachineBlockで一元化
-        addMachine("crusher_block", MachineBlock.Kind.CRUSHER);
-        addMachine("industrial_furnace_block", MachineBlock.Kind.INDUSTRIAL_FURNACE);
-        addMachine("rolling_mill_block", MachineBlock.Kind.ROLLING_MILL);
-        addMachine("assembler_block", MachineBlock.Kind.ASSEMBLER);
-        addMachine("additive_fabricator_block", MachineBlock.Kind.ADDITIVE_FABRICATOR);
-        addMachine("assembly_line_module_block", MachineBlock.Kind.ASSEMBLY_LINE);
-        addMachine("packing_machine_block", MachineBlock.Kind.PACKING_MACHINE);
+        // 軽工業
+        addMachine("crusher_block", CRUSHER);
+        addMachine("industrial_furnace_block", INDUSTRIAL_FURNACE);
+        addMachine("rolling_mill_block", ROLLING_MILL);
+        addMachine("assembler_block", ASSEMBLER);
+        addMachine("additive_fabricator_block", ADDITIVE_FABRICATOR);
+        addMachine("assembly_line_module_block", ASSEMBLY_LINE);
+        addMachine("packing_machine_block", PACKING_MACHINE);
 
-        // 4) 重工業機械
-        addMachine("blast_furnace_block", MachineBlock.Kind.BLAST_FURNACE);
-        addMachine("electric_furnace_block", MachineBlock.Kind.ELECTRIC_FURNACE);
-        addMachine("smelter_block", MachineBlock.Kind.SMELTER);
-        addMachine("compressor_block", MachineBlock.Kind.COMPRESSOR);
-        addMachine("gas_refiner_block", MachineBlock.Kind.GAS_REFINER);
-        addMachine("excavator_machine_block", MachineBlock.Kind.EXCAVATOR);
-        addMachine("conveyor_belt_block", MachineBlock.Kind.CONVEYOR_BELT);
-        addMachine("industrial_crane_block", MachineBlock.Kind.INDUSTRIAL_CRANE);
-        addMachine("robotic_arm_block", MachineBlock.Kind.ROBOTIC_ARM);
+        // 重工業
+        addMachine("blast_furnace_block", BLAST_FURNACE);
+        addMachine("electric_furnace_block", ELECTRIC_FURNACE);
+        addMachine("smelter_block", SMELTER);
+        addMachine("compressor_block", COMPRESSOR);
+        addMachine("gas_refiner_block", GAS_REFINER);
+        addMachine("excavator_machine_block", EXCAVATOR);
+        addMachine("conveyor_belt_block", CONVEYOR_BELT);
+        addMachine("industrial_crane_block", INDUSTRIAL_CRANE);
+        addMachine("robotic_arm_block", ROBOTIC_ARM);
 
-        // 5) 化学工業
-        addMachine("chemical_reactor_block", MachineBlock.Kind.CHEM_REACTOR);
-        addMachine("distillation_tower_block", MachineBlock.Kind.DISTILLATION_TOWER);
-        addMachine("electrolyzer_block", MachineBlock.Kind.ELECTROLYZER);
-        addMachine("gas_separator_block", MachineBlock.Kind.GAS_SEPARATOR);
-        addMachine("polymerizer_block", MachineBlock.Kind.POLYMERIZER);
-        addMachine("fertilizer_synthesizer_block", MachineBlock.Kind.FERTILIZER_SYNTH);
-        addMachine("wastewater_processor_block", MachineBlock.Kind.WASTEWATER_PROCESSOR);
-        addMachine("nuclear_waste_processor_block", MachineBlock.Kind.NUCLEAR_WASTE_PROCESSOR);
+        // 化学
+        addMachine("chemical_reactor_block", CHEM_REACTOR);
+        addMachine("distillation_tower_block", DISTILLATION_TOWER);
+        addMachine("electrolyzer_block", ELECTROLYZER);
+        addMachine("gas_separator_block", GAS_SEPARATOR);
+        addMachine("polymerizer_block", POLYMERIZER);
+        addMachine("fertilizer_synthesizer_block", FERTILIZER_SYNTH);
+        addMachine("wastewater_processor_block", WASTEWATER_PROCESSOR);
+        addMachine("nuclear_waste_processor_block", NUCLEAR_WASTE_PROCESSOR);
 
-        // 6) エネルギーシステム
-        addMachine("coal_generator_block", MachineBlock.Kind.COAL_GEN);
-        addMachine("oil_generator_block", MachineBlock.Kind.OIL_GEN);
-        addMachine("gas_turbine_generator_block", MachineBlock.Kind.GAS_TURBINE);
-        addMachine("nuclear_reactor_block", MachineBlock.Kind.NUCLEAR_REACTOR);
-        addMachine("fast_breeder_reactor_block", MachineBlock.Kind.FAST_BREEDER);
-        addMachine("solar_panel_block", MachineBlock.Kind.SOLAR_PANEL);
-        addMachine("wind_turbine_block", MachineBlock.Kind.WIND_TURBINE);
-        addMachine("hydro_turbine_block", MachineBlock.Kind.HYDRO_TURBINE);
-        addMachine("fuel_cell_generator_block", MachineBlock.Kind.FUEL_CELL);
-        addMachine("battery_bank_block", MachineBlock.Kind.BATTERY_BANK);
-        addMachine("transformer_block", MachineBlock.Kind.TRANSFORMER);
-        addMachine("superconductor_storage_block", MachineBlock.Kind.SUPERCONDUCTOR_STORAGE);
-        addMachine("power_transmission_anchor_block", MachineBlock.Kind.POWER_TRANSMISSION_ANCHOR);
+        // エネルギー
+        addMachine("coal_generator_block", COAL_GEN);
+        addMachine("oil_generator_block", OIL_GEN);
+        addMachine("gas_turbine_generator_block", GAS_TURBINE);
+        addMachine("nuclear_reactor_block", NUCLEAR_REACTOR);
+        addMachine("fast_breeder_reactor_block", FAST_BREEDER);
+        addMachine("solar_panel_block", SOLAR_PANEL);
+        addMachine("wind_turbine_block", WIND_TURBINE);
+        addMachine("hydro_turbine_block", HYDRO_TURBINE);
+        addMachine("fuel_cell_generator_block", FUEL_CELL);
+        addMachine("battery_bank_block", BATTERY_BANK);
+        addMachine("transformer_block", TRANSFORMER);
+        addMachine("superconductor_storage_block", SUPERCONDUCTOR_STORAGE);
+        addMachine("power_transmission_anchor_block", POWER_TRANSMISSION_ANCHOR);
 
         BLOCKS.put("fluid_pipe_block", new FluidPipeBlock());
         BLOCKS.put("power_cable_block", new ElectricCableBlock());
 
-        // 実登録
         BLOCKS.forEach(ProjectInfinityMaxAPI::registerBlock);
     }
 
     private static void addSimpleBlock(String id) {
         BLOCKS.put(id, new Block(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(4.0f, 10.0f).requiresCorrectToolForDrops()));
     }
-
     private static void addMachine(String id, MachineBlock.Kind kind) {
         BLOCKS.put(id, new MachineBlock(kind));
     }
 
-    // ====== ブロックエンティティ登録 ======
-    private static void registerBlockEntities() {
+    // BlockItem を自動生成（見落としがち）
+    private static void registerBlockItems() {
+        for (var e : BLOCKS.entrySet()) {
+            String id = e.getKey();
+            Block b = e.getValue();
+            ITEMS.putIfAbsent(id, new BlockItem(b, new Item.Properties()));
+        }
+        // APIへ
+        ITEMS.forEach(ProjectInfinityMaxAPI::registerItem);
+    }
 
-        // FluidPipeBlockEntity, ElectricCableBlockEntity, MachineBlockEntity registrations are already present in your prior code.
-        // ここに追加する BE のTYPE生成例:
-        BlockEntityType<MachineBlockEntity> machineType =
-            BlockEntityType.Builder.of((pos, state) -> new MachineBlockEntity(pos, state, MachineBlock.Kind.CRUSHER),
-            /* machine blocks */ machineBlocks.toArray(new Block[0]))
-            .build(null);
-            MachineBlockEntity.TYPE = machineType;
-            ProjectInfinityMaxAPI.registerBlockEntity("machine_block_entity", machineType);
+    // ========== BlockEntity ==========
+    private static void registerBlockEntities() {
+        // MachineBlock を集めて1つの BE Type に束ねる
+        List<Block> machineBlocks = new ArrayList<>();
+        BLOCKS.forEach((id, b) -> { if (b instanceof MachineBlock) machineBlocks.add(b); });
+
+        BlockEntityType<MachineBlockEntity> type = BlockEntityType.Builder
+                .of((pos, state) -> new MachineBlockEntity(pos, state,
+                        (state.getBlock() instanceof MachineBlock mb) ? mb.kind : CRUSHER),
+                    machineBlocks.toArray(new Block[0]))
+                .build(null);
+
+        MachineBlockEntity.TYPE = type;
+        ProjectInfinityMaxAPI.registerBlockEntity("machine_block_entity", type);
+
+        // ほか：FluidPipe / ElectricCable なども同様に…
+        BlockEntityType<FluidPipeBlockEntity> fluidType =
+                BlockEntityType.Builder.of(FluidPipeBlockEntity::new, BLOCKS.get("fluid_pipe_block")).build(null);
+        FluidPipeBlockEntity.TYPE = fluidType;
+        ProjectInfinityMaxAPI.registerBlockEntity("fluid_pipe_entity", fluidType);
+
+        BlockEntityType<ElectricCableBlockEntity> cableType =
+                BlockEntityType.Builder.of(ElectricCableBlockEntity::new, BLOCKS.get("power_cable_block")).build(null);
+        ElectricCableBlockEntity.TYPE = cableType;
+        ProjectInfinityMaxAPI.registerBlockEntity("power_cable_entity", cableType);
 
         // Coal generator
-        BlockEntityType<CoalGeneratorBlockEntity> coalGenType = BlockEntityType.Builder.of(CoalGeneratorBlockEntity::new, BLOCKS.get("coal_generator_block")).build(null);
+        BlockEntityType<CoalGeneratorBlockEntity> coalGenType = 
+                BlockEntityType.Builder.of(CoalGeneratorBlockEntity::new, BLOCKS.get("coal_generator_block")).build(null);
             CoalGeneratorBlockEntity.TYPE = coalGenType;
             ProjectInfinityMaxAPI.registerBlockEntity("coal_generator_entity", coalGenType);
 
         // Transformer
-        BlockEntityType<TransformerBlockEntity> transType = BlockEntityType.Builder.of(TransformerBlockEntity::new, BLOCKS.get("transformer_block")).build(null);
+        BlockEntityType<TransformerBlockEntity> transType = 
+                BlockEntityType.Builder.of(TransformerBlockEntity::new, BLOCKS.get("transformer_block")).build(null);
             TransformerBlockEntity.TYPE = transType;
             ProjectInfinityMaxAPI.registerBlockEntity("transformer_entity", transType);
 
         // Fluid tank
-        BlockEntityType<FluidTankBlockEntity> tankType = BlockEntityType.Builder.of(FluidTankBlockEntity::new, BLOCKS.get("tank_block")).build(null);
+        BlockEntityType<FluidTankBlockEntity> tankType = 
+                BlockEntityType.Builder.of(FluidTankBlockEntity::new, BLOCKS.get("tank_block")).build(null);
             FluidTankBlockEntity.TYPE = tankType;
             ProjectInfinityMaxAPI.registerBlockEntity("tank_entity", tankType);
-        // MenuType registration (pseudo)
-        public static final MenuType<MachineMenu> MACHINE_MENU = new MenuType<>((id, inv) -> new MachineMenu(id, inv, new SimpleContainer(3), new SimpleContainerData(4), BlockPos.ZERO));
-        ProjectInfinityMaxAPI.registerMenuType("machine_menu", MACHINE_MENU);
 
-        // MachineBlock を全て束ねて1つの BlockEntityType に
-        List<Block> machineBlocks = new ArrayList<>();
-        BLOCKS.forEach((id, b) -> { if (b instanceof MachineBlock) machineBlocks.add(b); });
+    }
 
-        @SuppressWarnings("unchecked")
-        BlockEntityType<MachineBlockEntity> type = BlockEntityType.Builder
-                .of((pos, state) -> new MachineBlockEntity(pos, state,
-                        (state.getBlock() instanceof MachineBlock mb) ? mb.kind : MachineBlock.Kind.CRUSHER),
-                    machineBlocks.toArray(new Block[0]))
-                .build(null);
-
-        MachineBlockEntity.TYPE = type; // BEクラスに注入しておく
-        ProjectInfinityMaxAPI.registerBlockEntity("machine_block_entity", type);
+    // ========== MenuType（GUI） ==========
+    // APIに registerMenuType(...) がある前提。無い場合は API に1メソッド追加してください。
+    private static void registerMenuTypes() {
+        MenuType<MachineMenu> machineMenu = new MenuType<>(
+                (id, inv) -> new MachineMenu(id, inv, new SimpleContainer(3), new SimpleContainerData(4), BlockPos.ZERO)
+        );
+        ProjectInfinityMaxAPI.registerMenuType("machine_menu", machineMenu);
     }
 }
