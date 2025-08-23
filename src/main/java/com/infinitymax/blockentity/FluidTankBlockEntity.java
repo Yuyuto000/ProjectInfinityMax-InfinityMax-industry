@@ -1,4 +1,4 @@
-package com.infinitymax.industry.fluid;
+package com.infinitymax.industry. blockentity;
 
 import com.infinitymax.industry.tick.TickDispatcher;
 import net.minecraft.core.BlockPos;
