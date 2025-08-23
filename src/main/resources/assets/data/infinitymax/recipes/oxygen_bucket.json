@@ -1,0 +1,15 @@
+{
+  "type": "infinitymax:machine_recipe",
+  "machine": "electrolyzer",
+  "inputs": [
+    { "item": "water_bucket", "count": 1 }
+  ],
+  "outputs": [
+    { "item": "hydrogen_cell", "count": 2 },
+    { "item": "oxygen_bucket", "count": 1 }
+  ],
+  "ticks": 200,
+  "joules_per_tick": 100.0,
+  "fluid_input": [{"fluid": "water", "amount": 1000}],
+  "fluid_output": [{"fluid": "hydrogen", "amount": 500}]
+}
