@@ -247,6 +247,12 @@ public final class RegistryManager {
         MenuType<MachineMenu> machineMenu = new MenuType<>(
                 (id, inv) -> new MachineMenu(id, inv, new SimpleContainer(3), new SimpleContainerData(4), BlockPos.ZERO)
         );
+        // Recipe Serializer / Type 登録（必須）
+        Registry.register(Registry.RECIPE_SERIALIZER, new ResourceLocation("infinitymax", "machine_recipe"), MachineRecipe.Serializer.INSTANCE);
+        RecipeType<MachineRecipe> rtype = RecipeType.register("infinitymax:machine_recipe"); // or MachineRecipeTypes.MACHINE
+
+        // MenuType 登録（Generatorなど）
+        ProjectInfinityMaxAPI.registerMenuType("generator_menu", generatorMenuType);
         ProjectInfinityMaxAPI.registerMenuType("machine_menu", machineMenu);
     }
 }
