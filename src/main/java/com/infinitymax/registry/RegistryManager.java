@@ -201,6 +201,10 @@ public class RegistryManager {
         BlockEntityType<FluidTankBlockEntity> tankType = BlockEntityType.Builder.of(FluidTankBlockEntity::new, BLOCKS.get("tank_block")).build(null);
             FluidTankBlockEntity.TYPE = tankType;
             ProjectInfinityMaxAPI.registerBlockEntity("tank_entity", tankType);
+        // MenuType registration (pseudo)
+        public static final MenuType<MachineMenu> MACHINE_MENU = new MenuType<>((id, inv) -> new MachineMenu(id, inv, new SimpleContainer(3), new SimpleContainerData(4), BlockPos.ZERO));
+        ProjectInfinityMaxAPI.registerMenuType("machine_menu", MACHINE_MENU);
+
         // MachineBlock を全て束ねて1つの BlockEntityType に
         List<Block> machineBlocks = new ArrayList<>();
         BLOCKS.forEach((id, b) -> { if (b instanceof MachineBlock) machineBlocks.add(b); });
