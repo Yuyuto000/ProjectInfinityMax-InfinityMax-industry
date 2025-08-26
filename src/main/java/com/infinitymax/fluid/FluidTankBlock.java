@@ -1,6 +1,5 @@
 package com.infinitymax.industry.fluid;
 
-import com.infinitymax.industry.block.MachineBlock; // optional for style
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
