@@ -2,92 +2,105 @@ package com.infinitymax.industry.energy;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.*;
 
 /**
- * 近傍BFSで「同一グラフ」を1tickだけ集約評価。
- * 近似：同一グラフ内は目標電圧へ緩和、需要に応じて電流を配分し、導体抵抗で損失。
- * 超軽量：チャンク内 or 半径 N で切る。
+ * 1つの連結グラフとしての電気ネットワーク。
+ * - 電源/負荷/導体ノードを保持
+ * - 毎tick電流配分を実行
  */
-public final class ElectricNetwork {
-    private ElectricNetwork() {}
+public class ElectricNetwork {
 
-    /** 隣接ノード探索（6方向のみ） */
-    public static List<BlockPos> neighbors(BlockPos p) {
-        return List.of(p.above(), p.below(), p.north(), p.south(), p.east(), p.west());
+    private final Set<BlockPos> nodes = new HashSet<>();
+
+    public ElectricNetwork(Set<BlockPos> nodes) {
+        this.nodes.addAll(nodes);
     }
 
-    /** グラフ構築（半径制限） */
-    public static Set<BlockPos> flood(Level level, BlockPos origin, int maxNodes) {
+    /** ワールド内の全ElectricNetworkを探索 */
+    public static List<ElectricNetwork> discoverAll(Level level) {
         Set<BlockPos> visited = new HashSet<>();
-        Deque<BlockPos> q = new ArrayDeque<>();
-        q.add(origin);
-        while (!q.isEmpty() && visited.size() < maxNodes) {
-            BlockPos pos = q.poll();
-            if (!visited.add(pos)) continue;
+        List<ElectricNetwork> result = new ArrayList<>();
+
+        for (BlockPos pos : BlockPos.betweenClosed(
+                level.getMinBuildHeight(),
+                level.getMinBuildHeight(),
+                level.getMinBuildHeight(),
+                level.getMaxBuildHeight(),
+                level.getMaxBuildHeight(),
+                level.getMaxBuildHeight()
+        )) {
             BlockEntity be = level.getBlockEntity(pos);
             if (!(be instanceof IElectricNode)) continue;
-            for (BlockPos n : neighbors(pos)) {
+            if (visited.contains(pos)) continue;
+
+            Set<BlockPos> comp = flood(level, pos);
+            visited.addAll(comp);
+            result.add(new ElectricNetwork(comp));
+        }
+        return result;
+    }
+
+    private static Set<BlockPos> flood(Level level, BlockPos start) {
+        Set<BlockPos> visited = new HashSet<>();
+        Deque<BlockPos> q = new ArrayDeque<>();
+        q.add(start);
+
+        while (!q.isEmpty()) {
+            BlockPos p = q.poll();
+            if (!visited.add(p)) continue;
+            BlockEntity be = level.getBlockEntity(p);
+            if (!(be instanceof IElectricNode)) continue;
+            for (BlockPos n : neighbors(p)) {
                 BlockEntity nbe = level.getBlockEntity(n);
-                if (nbe instanceof IElectricNode) q.add(n);
+                if (nbe instanceof IElectricNode && !visited.contains(n)) {
+                    q.add(n);
+                }
             }
         }
         return visited;
     }
 
-    /**
-     * 1tick更新：同一グラフ内で
-     *  - 電源ノードの目標電圧（高い方）に緩和
-     *  - 需要ノードに I を配分
-     *  - 損失 I^2R を見かけのエネルギー損失に計上
-     */
-    public static void tick(Level level, BlockPos anyNode, double tickDelta, int maxNodes) {
-        Set<BlockPos> nodes = flood(level, anyNode, maxNodes);
+    private static List<BlockPos> neighbors(BlockPos p) {
+        return List.of(p.above(), p.below(), p.north(), p.south(), p.east(), p.west());
+    }
+
+    /** 毎tickで電力バランスを計算 */
+    public void tick(Level level) {
         if (nodes.isEmpty()) return;
 
-        // 収集
-        double maxSourceVoltage = 0.0;
         List<IElectricNode> sources = new ArrayList<>();
-        List<IElectricNode> loads = new ArrayList<>();
-        List<IElectricNode> conductors = new ArrayList<>();
+        List<IElectricNode> loads   = new ArrayList<>();
+        double maxVoltage = 0;
 
         for (BlockPos p : nodes) {
             BlockEntity be = level.getBlockEntity(p);
-            IElectricNode n = (IElectricNode) be;
-            double v = n.getVoltageV();
-            if (n.getMaxOutputA() > 0.0) { // 電源
+            if (!(be instanceof IElectricNode n)) continue;
+
+            if (n.getMaxOutputA() > 0) {
                 sources.add(n);
-                if (v > maxSourceVoltage) maxSourceVoltage = v;
-            } else if (n.getMaxIntakeA() > 0.0) { // 負荷
+                if (n.getVoltageV() > maxVoltage) maxVoltage = n.getVoltageV();
+            } else if (n.getMaxIntakeA() > 0) {
                 loads.add(n);
-            } else { // 純導体
-                conductors.add(n);
             }
         }
-        if (sources.isEmpty() && loads.isEmpty()) return;
+        if (sources.isEmpty() || loads.isEmpty()) return;
 
-        double totalAvailableA = sources.stream().mapToDouble(IElectricNode::getMaxOutputA).sum();
-        double totalLoadNeedA = loads.stream().mapToDouble(IElectricNode::getMaxIntakeA).sum();
-        double supplyA = Math.min(totalAvailableA, totalLoadNeedA);
-        if (supplyA <= 0) return;
+        double totalSupply = sources.stream().mapToDouble(IElectricNode::getMaxOutputA).sum();
+        double totalDemand = loads.stream().mapToDouble(IElectricNode::getMaxIntakeA).sum();
+        double currentA = Math.min(totalSupply, totalDemand);
 
-        // 配分（シンプル：負荷の MaxIntake 比例配分）
+        // 負荷へ配分
         for (IElectricNode load : loads) {
-            double share = supplyA * (load.getMaxIntakeA() / Math.max(totalLoadNeedA, 1e-9));
-            double flowed = load.pushPullCurrent(level, null, maxSourceVoltage, +share);
-            // 損失は各ノードの内部抵抗に依存（ケーブルBE側で内部抵抗を持つ）
-            double lossJ = PowerUnits.resistiveLossJ(flowed, load.getInternalResistanceOhm(), tickDelta);
-            // ここでは結果を使わない（発熱表現など後で）
+            double share = currentA * (load.getMaxIntakeA() / totalDemand);
+            load.pushPullCurrent(level, null, maxVoltage, +share);
         }
-        // 電源側からも実際に出力させて電流バランスを合わせる
+        // 電源から引く
         for (IElectricNode src : sources) {
-            double outA = Math.min(src.getMaxOutputA(), supplyA * (src.getMaxOutputA() / Math.max(totalAvailableA, 1e-9)));
-            double flowed = src.pushPullCurrent(level, null, maxSourceVoltage, -outA); // 供給＝負電流で
-            double lossJ = PowerUnits.resistiveLossJ(Math.abs(flowed), src.getInternalResistanceOhm(), tickDelta);
+            double share = currentA * (src.getMaxOutputA() / totalSupply);
+            src.pushPullCurrent(level, null, maxVoltage, -share);
         }
-        // 導体ノードは見かけ電圧をソース電圧へ緩和（後述ケーブルBE側で反映）
     }
 }
