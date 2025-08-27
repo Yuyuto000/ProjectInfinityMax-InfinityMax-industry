@@ -1,18 +1,19 @@
 package com.infinitymax.industry.fluid;
 
-import com.infinitymax.industry.network.NetworkManager;
+import com.infinitymax.industry.network.SmartNetworkManager;
 import com.infinitymax.industry.tick.TickDispatcher;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 配管 (Pipe) の BlockEntity 実装（IPressureNode）
  *
- * - ネットワークの再構築はデバウンスでまとめる仕様（NetworkManager.markFluidDirty）。
- * - serverTick() は軽量処理 + NetworkManager.serverTick(level) を呼ぶ。
+ * - SmartNetworkManager を使って「起点座標つきデバウンス要求」を出す仕様
+ * - serverTick() は軽量処理 + SmartNetworkManager.serverTick(level) を呼ぶ
  */
 public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
 
@@ -35,9 +36,9 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
     public void setRemoved() {
         super.setRemoved();
         TickDispatcher.unregister(this);
-        // BEが消滅したのでネットワーク再構築を「要求」する（デバウンス）
+        // 削除されたので「この位置を起点に」デバウンス再構築を要求
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().markFluidDirty(level);
+            SmartNetworkManager.get().markFluidDirty(level, worldPosition);
         }
     }
 
@@ -81,26 +82,24 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
 
     /**
      * グラフ構造が変わった可能性を通知（Block の neighborChanged 等から呼ぶ）。
-     * ここではデバウンス要求を出すのみ。
+     * 起点座標付きで SmartNetworkManager にデバウンス要求を出す。
      */
     @Override
     public void markDirtyGraph() {
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().markFluidDirty(level);
+            SmartNetworkManager.get().markFluidDirty(level, worldPosition);
         }
     }
 
     /**
      * サーバー側ティック処理。
-     * - ネットワーク再構築のデバウンス管理を行う NetworkManager を呼ぶ。
-     * - パイプ個体の軽い更新（微小な圧力緩和など）を行う。
+     * - SmartNetworkManager.serverTick(level) を呼んでデバウンス再構築やネットワーク tick を回す
+     * - 個体の軽量な緩和処理のみ行う
      */
     public void serverTick() {
         if (level == null || level.isClientSide) return;
-        // NetworkManager に tick を委譲（デバウンス再構築・各ネットワーク tick を実行）
-        NetworkManager.get().serverTick(level);
-
-        // ローカルな緩和処理（必要に応じて調整）
+        SmartNetworkManager.get().serverTick(level);
+        // ローカル緩和（例）
         pressureKPa = Math.max(101.3, pressureKPa - 0.001);
     }
 
@@ -134,8 +133,8 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
     public void onLoad() {
         super.onLoad();
         if (level != null && !level.isClientSide) {
-            // チャンク読み込み時はデバウンス要求（即時再構築は避ける）
-            NetworkManager.get().markFluidDirty(level);
+            // チャンク読み込み時は「この位置」を起点にデバウンス再構築を要求
+            SmartNetworkManager.get().markFluidDirty(level, worldPosition);
         }
     }
 
