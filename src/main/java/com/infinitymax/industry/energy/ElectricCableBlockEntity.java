@@ -1,18 +1,19 @@
 package com.infinitymax.industry.energy;
 
-import com.infinitymax.industry.network.NetworkManager;
+import com.infinitymax.industry.network.SmartNetworkManager;
 import com.infinitymax.industry.tick.TickDispatcher;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 電力ケーブル（導体ノード）
  *
- * - ネットワーク再構築要求は NetworkManager.markElectricDirty(level) へ
- * - serverTick() 内で NetworkManager.serverTick(level) を呼ぶ
+ * - SmartNetworkManager を使って局所デバウンス再構築を要求する
+ * - serverTick() 内で SmartNetworkManager.serverTick(level) を呼ぶ
  */
 public class ElectricCableBlockEntity extends BlockEntity implements IElectricNode {
 
@@ -32,7 +33,7 @@ public class ElectricCableBlockEntity extends BlockEntity implements IElectricNo
         super.setRemoved();
         TickDispatcher.unregister(this);
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().markElectricDirty(level);
+            SmartNetworkManager.get().markElectricDirty(level, worldPosition);
         }
     }
 
@@ -46,6 +47,7 @@ public class ElectricCableBlockEntity extends BlockEntity implements IElectricNo
     public double pushPullCurrent(Level lvl, BlockPos pos, double requestedVoltageV, double requestedCurrentA) {
         double allowed = Math.min(Math.abs(requestedCurrentA), maxCurrentA);
         double sign = Math.signum(requestedCurrentA);
+        // 見かけ電圧の緩和（表示用）
         voltageV += (requestedVoltageV - voltageV) * 0.2;
         return sign * allowed;
     }
@@ -53,14 +55,14 @@ public class ElectricCableBlockEntity extends BlockEntity implements IElectricNo
     @Override
     public void markDirtyGraph() {
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().markElectricDirty(level);
+            SmartNetworkManager.get().markElectricDirty(level, worldPosition);
         }
     }
 
     public void serverTick() {
         if (level == null || level.isClientSide) return;
-        NetworkManager.get().serverTick(level);
-        // 少しずつ減衰させる（表示用）
+        SmartNetworkManager.get().serverTick(level);
+        // 表示用にわずかに減衰
         voltageV *= 0.999;
     }
 
@@ -68,13 +70,13 @@ public class ElectricCableBlockEntity extends BlockEntity implements IElectricNo
     public void onLoad() {
         super.onLoad();
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().markElectricDirty(level);
+            SmartNetworkManager.get().markElectricDirty(level, worldPosition);
         }
     }
 
     public void onNeighborsChanged() {
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().markElectricDirty(level);
+            SmartNetworkManager.get().markElectricDirty(level, worldPosition);
         }
     }
 
