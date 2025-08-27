@@ -7,27 +7,18 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * 配管 (Pipe) の BlockEntity 実装（IPressureNode）
  *
- * 変更点／仕様：
- * - 以前は各 Pipe が毎tickで FluidNetwork.tick を呼んでいた → 負荷が大きい。
- * - 今回はネットワークの再構築要求のみ行い、NetworkManager がネットワーク単位で tick を実行。
- * - Block 側で neighborChanged / onPlace / onRemove 等のタイミングで onNeighborsChanged() を呼んでください。
- *
- * 流量の符号：
- * - flow(level, pos, requestedmB) の requestedmB は、
- *     >  正 (例 +500) で「受入 (in)」を要求
- *     >  負 (例 -200) で「供出 (out)」を要求
- * - 戻り値は実際に処理した mB（受入は + 、供出は -）。
+ * - ネットワークの再構築はデバウンスでまとめる仕様（NetworkManager.markFluidDirty）。
+ * - serverTick() は軽量処理 + NetworkManager.serverTick(level) を呼ぶ。
  */
 public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
 
     public static BlockEntityType<FluidPipeBlockEntity> TYPE;
 
-    // 基本パラメータ（パイプはタンクより小容量）
+    // 基本パラメータ
     private int capacitymB = 2000;
     private int amountmB = 0;
     private double pressureKPa = 101.3;
@@ -44,9 +35,9 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
     public void setRemoved() {
         super.setRemoved();
         TickDispatcher.unregister(this);
-        // 削除時はネットワーク構造が変わったので再構築を要求
+        // BEが消滅したのでネットワーク再構築を「要求」する（デバウンス）
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().rebuildFluidNetworks(level);
+            NetworkManager.get().markFluidDirty(level);
         }
     }
 
@@ -60,14 +51,13 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
 
     /**
      * フロー処理：requestedmB > 0 => 受入 (in)、 requestedmB < 0 => 供出 (out)
-     * 戻り値は実際に処理された量（受入なら +、供出なら -）
+     * 戻り値は実際に処理された量（受入なら +、供出なら -）。
      */
     @Override
     public int flow(Level level, BlockPos pos, int requestedmB) {
         if (requestedmB == 0) return 0;
 
         if (requestedmB > 0) {
-            // 受入
             int can = Math.min(requestedmB, Math.min(maxInPerTick, capacitymB - amountmB));
             if (can > 0) {
                 amountmB += can;
@@ -75,7 +65,6 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
             }
             return can;
         } else {
-            // 供出
             int want = -requestedmB;
             int can = Math.min(want, Math.min(maxOutPerTick, amountmB));
             if (can > 0) {
@@ -87,33 +76,35 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
     }
 
     private void updatePressure() {
-        // 簡易モデル：満タン時に高圧化（定数は調整可）
         pressureKPa = 101.3 + (amountmB / (double)Math.max(1, capacitymB)) * 400.0;
     }
 
     /**
-     * グラフ構造が変わった可能性を通知する（Block 側の neighborChanged から呼ばれる）。
-     * NetworkManager に再構築要求を投げる。
+     * グラフ構造が変わった可能性を通知（Block の neighborChanged 等から呼ぶ）。
+     * ここではデバウンス要求を出すのみ。
      */
     @Override
     public void markDirtyGraph() {
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().markDirty(level);
+            NetworkManager.get().markFluidDirty(level);
         }
     }
 
     /**
-     * サーバー側ティック処理。ネットワーク全体の流体移動は NetworkManager が行うため、
-     * ここではローカルの緩和処理やアニメーション用値更新などの軽量処理のみ行う。
+     * サーバー側ティック処理。
+     * - ネットワーク再構築のデバウンス管理を行う NetworkManager を呼ぶ。
+     * - パイプ個体の軽い更新（微小な圧力緩和など）を行う。
      */
     public void serverTick() {
         if (level == null || level.isClientSide) return;
-        NetworkManager.get().serverTick(level); // デバウンス付き再構築
-        // 例: 微小な自然漏れや圧力緩和を入れたいならここに
+        // NetworkManager に tick を委譲（デバウンス再構築・各ネットワーク tick を実行）
+        NetworkManager.get().serverTick(level);
+
+        // ローカルな緩和処理（必要に応じて調整）
         pressureKPa = Math.max(101.3, pressureKPa - 0.001);
     }
 
-    // ====== 永続化 ======
+    // ===== 永続化 =====
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
@@ -121,9 +112,7 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
         capacitymB = tag.contains("capacitymB") ? tag.getInt("capacitymB") : capacitymB;
         pressureKPa = tag.contains("pressureKPa") ? tag.getDouble("pressureKPa") : pressureKPa;
         if (tag.contains("medium")) {
-            try {
-                medium = Medium.valueOf(tag.getString("medium"));
-            } catch (IllegalArgumentException ignored) {}
+            try { medium = Medium.valueOf(tag.getString("medium")); } catch (IllegalArgumentException ignored) {}
         }
         maxInPerTick = tag.contains("maxIn") ? tag.getInt("maxIn") : maxInPerTick;
         maxOutPerTick = tag.contains("maxOut") ? tag.getInt("maxOut") : maxOutPerTick;
@@ -140,19 +129,17 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
         tag.putInt("maxOut", maxOutPerTick);
     }
 
-    // ===== ライフサイクル補助 =====
+    // ライフサイクル補助
     @Override
     public void onLoad() {
         super.onLoad();
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().rebuildFluidNetworks(level);
+            // チャンク読み込み時はデバウンス要求（即時再構築は避ける）
+            NetworkManager.get().markFluidDirty(level);
         }
     }
 
-    /**
-     * Block 側の neighborChanged で呼ぶユーティリティ。
-     * 例: TankBlock / PipeBlock の neighborChanged 内で BE を取得して呼び出す。
-     */
+    /** Block 側の neighborChanged で呼ぶユーティリティ。 */
     public void onNeighborsChanged() {
         markDirtyGraph();
     }
