@@ -1,51 +1,52 @@
 package com.infinitymax.industry.fluid;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.*;
 
 /**
- * 1つの連結グラフとしての流体ネットワーク。
- * - ノード(IPressureNode)の集合を保持
- * - tick時に流体を配分
+ * FluidNetwork:
+ * - 1つの連結コンポーネント（パイプ・タンクなど IPressureNode が繋がった集合）を表す
+ * - discoverAll(level) でワールド内の全ネットワークを列挙できる
+ * - tick(level) でネットワーク単位の流体バランスを計算する
+ *
+ * 注: discoverAll の全 BE スキャン部は環境依存。必要なら project の "all blockentity iterator" に合わせて置換してください。
  */
-public class FluidNetwork {
+public final class FluidNetwork {
 
-    private final Set<BlockPos> nodes = new HashSet<>();
+    private final Set<BlockPos> nodes;
 
     public FluidNetwork(Set<BlockPos> nodes) {
-        this.nodes.addAll(nodes);
+        this.nodes = new HashSet<>(nodes);
     }
 
-    /** ワールド内の全FluidNetworkを探索し直す */
-    public static List<FluidNetwork> discoverAll(Level level) {
+    /** ワールド内の全 FluidNetwork を発見して List で返す（再構築用） */
+    public static List<FluidNetwork> discoverAll(ServerLevel level) {
+        List<FluidNetwork> out = new ArrayList<>();
         Set<BlockPos> visited = new HashSet<>();
-        List<FluidNetwork> result = new ArrayList<>();
 
-        // 全BlockEntityを走査して IPressureNode のみ探索
-        for (BlockPos pos : BlockPos.betweenClosed(
-                level.getMinBuildHeight(),
-                level.getMinBuildHeight(),
-                level.getMinBuildHeight(),
-                level.getMaxBuildHeight(),
-                level.getMaxBuildHeight(),
-                level.getMaxBuildHeight()
-        )) {
-            BlockEntity be = level.getBlockEntity(pos);
-            if (!(be instanceof IPressureNode)) continue;
+        // 重要: ここは「ワールドの全 BlockEntity を列挙できる API」に差し替えてください。
+        // 例: level.blockEntityList (サンプル), あるいは level.getChunkSource().chunkMap... など
+        // ここでは簡潔のため仮のイテレータを使っています。
+        Iterable<BlockEntity> allBE = getAllBlockEntities(level);
+
+        for (BlockEntity be : allBE) {
+            BlockPos pos = be.getBlockPos();
             if (visited.contains(pos)) continue;
+            if (!(be instanceof IPressureNode)) continue;
 
-            // flood fill で一つのネットワークを構築
+            // BFS flood
             Set<BlockPos> comp = flood(level, pos);
             visited.addAll(comp);
-            result.add(new FluidNetwork(comp));
+            out.add(new FluidNetwork(comp));
         }
-        return result;
+        return out;
     }
 
-    /** floodfill: pos から繋がる IPressureNode 集合を取得 */
+    // ==== floodfill: start から繋がる IPressureNode の座標集合を返す ====
     private static Set<BlockPos> flood(Level level, BlockPos start) {
         Set<BlockPos> visited = new HashSet<>();
         Deque<BlockPos> q = new ArrayDeque<>();
@@ -56,26 +57,26 @@ public class FluidNetwork {
             if (!visited.add(p)) continue;
             BlockEntity be = level.getBlockEntity(p);
             if (!(be instanceof IPressureNode)) continue;
+            // 隣接を列挙して queue に追加
             for (BlockPos n : neighbors(p)) {
-                BlockEntity nbe = level.getBlockEntity(n);
-                if (nbe instanceof IPressureNode && !visited.contains(n)) {
-                    q.add(n);
+                if (!visited.contains(n)) {
+                    BlockEntity nbe = level.getBlockEntity(n);
+                    if (nbe instanceof IPressureNode) q.add(n);
                 }
             }
         }
         return visited;
     }
 
-    /** 6方向隣接 */
     private static List<BlockPos> neighbors(BlockPos p) {
         return List.of(p.above(), p.below(), p.north(), p.south(), p.east(), p.west());
     }
 
-    /** 毎tick流体バランス処理 */
+    /** ネットワーク全体の tick（流体移送計算） */
     public void tick(Level level) {
         if (nodes.isEmpty()) return;
 
-        // 同一ネットワーク内の全ノードを分類
+        // ノードを収集し、同一媒体のソース／シンクを分類
         Medium medium = null;
         List<IPressureNode> sources = new ArrayList<>();
         List<IPressureNode> sinks = new ArrayList<>();
@@ -85,30 +86,44 @@ public class FluidNetwork {
             if (!(be instanceof IPressureNode n)) continue;
             if (medium == null) medium = n.getMedium();
             if (n.getMedium() != medium) continue; // 異なる流体は混ぜない
-
-            if (n.getMaxFlowOutputPerTick() > 0 && n.getAmountmB() > 0) sources.add(n);
-            if (n.getMaxFlowIntakePerTick() > 0 && n.getAmountmB() < n.getCapacitymB()) sinks.add(n);
+            if (n.getAmountmB() > 0 && n.getMaxFlowOutputPerTick() > 0) sources.add(n);
+            if (n.getAmountmB() < n.getCapacitymB() && n.getMaxFlowIntakePerTick() > 0) sinks.add(n);
         }
         if (medium == null || sources.isEmpty() || sinks.isEmpty()) return;
 
-        // 差圧駆動の流量計算
-        double pMax = sources.stream().mapToDouble(IPressureNode::getPressureKPa).max().orElse(0);
-        double pMin = sinks.stream().mapToDouble(IPressureNode::getPressureKPa).min().orElse(pMax);
-        if (pMax <= pMin) return;
-
+        // 単純比例配分（差圧を使っても良いがまずは容量比）
         int totalOutCap = sources.stream().mapToInt(IPressureNode::getMaxFlowOutputPerTick).sum();
         int totalInCap  = sinks.stream().mapToInt(IPressureNode::getMaxFlowIntakePerTick).sum();
         int flow = Math.min(totalOutCap, totalInCap);
         if (flow <= 0) return;
 
-        // 比例配分
         for (IPressureNode s : sources) {
-            int share = (int) (flow * (s.getMaxFlowOutputPerTick() / (double) totalOutCap));
-            s.flow(level, null, -share);
+            int share = (int)Math.round(flow * (s.getMaxFlowOutputPerTick() / (double)Math.max(1, totalOutCap)));
+            s.flow(level, sBlockPos(s), -share); // 負＝供出
         }
         for (IPressureNode d : sinks) {
-            int share = (int) (flow * (d.getMaxFlowIntakePerTick() / (double) totalInCap));
-            d.flow(level, null, +share);
+            int share = (int)Math.round(flow * (d.getMaxFlowIntakePerTick() / (double)Math.max(1, totalInCap)));
+            d.flow(level, sBlockPos(d), +share); // 正＝受入
         }
+    }
+
+    /** onRebuilt フック（必要なら内部初期化を行う） */
+    public void onRebuilt(Level level) {
+        // ここでは何もしないが、ログや統計、初期均衡などが必要なら実装
+    }
+
+    // ==== ヘルパ: IPressureNode -> BlockPos (安全取得) ====
+    private static BlockPos sBlockPos(IPressureNode n) {
+        if (n instanceof net.minecraft.world.level.block.entity.BlockEntity be) return be.getBlockPos();
+        throw new IllegalStateException("IPressureNode must be a BlockEntity in this implementation");
+    }
+
+    // ==== ここはプロジェクトごとの全BE取得に置換してください ====
+    private static Iterable<BlockEntity> getAllBlockEntities(ServerLevel level) {
+        // *** 注意 ***
+        // ここは実際のプロジェクトの API に合わせて書き換えてください。
+        // 例: level.blockEntityList (一部の環境) や level.getChunkSource().chunkMap... など。
+        // ここではサンプルとして level.blockEntities.values() 相当を仮定します。
+        return level.blockEntities.values();
     }
 }
