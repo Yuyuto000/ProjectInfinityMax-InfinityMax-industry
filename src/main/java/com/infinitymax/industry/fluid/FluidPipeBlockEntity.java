@@ -98,7 +98,7 @@ public class FluidPipeBlockEntity extends BlockEntity implements IPressureNode {
     @Override
     public void markDirtyGraph() {
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().rebuildFluidNetworks(level);
+            NetworkManager.get().markDirty(level);
         }
     }
 
