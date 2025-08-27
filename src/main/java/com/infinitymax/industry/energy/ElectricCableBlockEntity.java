@@ -68,7 +68,7 @@ public class ElectricCableBlockEntity extends BlockEntity implements IElectricNo
     @Override
     public void markDirtyGraph() {
         if (level != null && !level.isClientSide) {
-            NetworkManager.get().rebuildElectricNetworks(level);
+            NetworkManager.get().markDirty(level);
         }
     }
 
