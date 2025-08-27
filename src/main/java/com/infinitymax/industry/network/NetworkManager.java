@@ -1,55 +1,117 @@
 package com.infinitymax.industry.network;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 
 import java.util.*;
 
-public class NetworkManager {
+/**
+ * NetworkManager（シングルトン）
+ *
+ * - Fluid ネットワークと Electric ネットワークを別々に管理
+ * - markFluidDirty / markElectricDirty を呼ぶとデバウンスフラグを立てる
+ * - serverTick(Level) をワールド毎のサーバティックから呼ぶと、
+ *   DEBOUNCE_TICKS を経て discoverAll() -> rebuild を行う
+ *
+ * 使用例:
+ * - 各 BE の onNeighborsChanged() / onLoad() / setRemoved() などで
+ *     NetworkManager.get().markFluidDirty(level);
+ *     NetworkManager.get().markElectricDirty(level);
+ *   を呼ぶ（該当するタイプのみ）。
+ *
+ * - サーバワールドの tick ループで毎 tick:
+ *     NetworkManager.get().serverTick(serverLevel);
+ */
+public final class NetworkManager {
 
     private static final NetworkManager INSTANCE = new NetworkManager();
 
-    // デバウンス用
-    private final Map<Level, Integer> dirtyTicks = new HashMap<>();
-    private final Map<Level, NetworkGraph> graphs = new HashMap<>();
+    public static NetworkManager get() { return INSTANCE; }
 
-    private static final int DEBOUNCE_TICKS = 5; // 5tick遅延で合成処理
+    // デバウンス設定（調整可）
+    private static final int DEBOUNCE_TICKS = 5;
 
-    public static NetworkManager get() {
-        return INSTANCE;
-    }
+    // ワールド -> 残りデバウンスカウント
+    private final Map<Level, Integer> fluidDirty = new HashMap<>();
+    private final Map<Level, Integer> electricDirty = new HashMap<>();
+
+    // ワールド -> 構築済みネットワークリスト
+    private final Map<Level, List<FluidNetwork>> fluidNetworks = new HashMap<>();
+    private final Map<Level, List<ElectricNetwork>> electricNetworks = new HashMap<>();
 
     private NetworkManager() {}
 
-    /** ノード変更があったときに呼び出す */
-    public void markDirty(Level level) {
-        if (level.isClientSide) return;
-        dirtyTicks.put(level, DEBOUNCE_TICKS);
+    // ========== 外部呼出（BE から） ==========
+    /** Fluid グラフが変化した可能性があるワールドをマークする */
+    public void markFluidDirty(Level level) {
+        if (level == null || level.isClientSide) return;
+        fluidDirty.put(level, DEBOUNCE_TICKS);
     }
 
-    /** サーバーTickごとに呼び出す */
-    public void serverTick(Level level) {
-        if (level.isClientSide) return;
-        if (!dirtyTicks.containsKey(level)) return;
+    /** Electric グラフが変化した可能性があるワールドをマークする */
+    public void markElectricDirty(Level level) {
+        if (level == null || level.isClientSide) return;
+        electricDirty.put(level, DEBOUNCE_TICKS);
+    }
 
-        int left = dirtyTicks.get(level) - 1;
-        if (left <= 0) {
-            rebuildGraph((ServerLevel) level);
-            dirtyTicks.remove(level);
-        } else {
-            dirtyTicks.put(level, left);
+    // ========== 毎ワールド tick で呼ぶ ========
+    /** ワールド毎にサーバTick から呼んでください */
+    public void serverTick(Level level) {
+        if (level == null || level.isClientSide) return;
+
+        // まず fluid side
+        if (fluidDirty.containsKey(level)) {
+            int left = fluidDirty.get(level) - 1;
+            if (left <= 0) {
+                rebuildFluidNetworks((ServerLevel) level);
+                fluidDirty.remove(level);
+            } else {
+                fluidDirty.put(level, left);
+            }
+        }
+
+        // electric side
+        if (electricDirty.containsKey(level)) {
+            int left = electricDirty.get(level) - 1;
+            if (left <= 0) {
+                rebuildElectricNetworks((ServerLevel) level);
+                electricDirty.remove(level);
+            } else {
+                electricDirty.put(level, left);
+            }
+        }
+
+        // tick each network once (軽量処理)
+        List<FluidNetwork> fns = fluidNetworks.get(level);
+        if (fns != null) {
+            for (FluidNetwork fn : fns) fn.tick(level);
+        }
+        List<ElectricNetwork> ens = electricNetworks.get(level);
+        if (ens != null) {
+            for (ElectricNetwork en : ens) en.tick(level);
         }
     }
 
-    /** グラフ再構築 */
-    private void rebuildGraph(ServerLevel level) {
-        NetworkGraph graph = new NetworkGraph(level);
-        graph.rebuild();
-        graphs.put(level, graph);
+    // ========== 再構築処理 ==========
+    private void rebuildFluidNetworks(ServerLevel level) {
+        List<FluidNetwork> nets = FluidNetwork.discoverAll(level);
+        fluidNetworks.put(level, nets);
+        // オプション: 各ネットワークに onRebuilt フックを渡す
+        for (FluidNetwork n : nets) n.onRebuilt(level);
     }
 
-    public Optional<NetworkGraph> getGraph(Level level) {
-        return Optional.ofNullable(graphs.get(level));
+    private void rebuildElectricNetworks(ServerLevel level) {
+        List<ElectricNetwork> nets = ElectricNetwork.discoverAll(level);
+        electricNetworks.put(level, nets);
+        for (ElectricNetwork n : nets) n.onRebuilt(level);
+    }
+
+    // ========== 取得 API ==========
+    public List<FluidNetwork> getFluidNetworks(Level level) {
+        return fluidNetworks.getOrDefault(level, Collections.emptyList());
+    }
+
+    public List<ElectricNetwork> getElectricNetworks(Level level) {
+        return electricNetworks.getOrDefault(level, Collections.emptyList());
     }
 }
