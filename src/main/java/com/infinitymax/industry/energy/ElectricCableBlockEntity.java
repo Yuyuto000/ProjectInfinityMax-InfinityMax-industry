@@ -76,7 +76,8 @@ public class ElectricCableBlockEntity extends BlockEntity implements IElectricNo
     public void serverTick() {
         if (level == null || level.isClientSide) return;
         // ここではケーブル自体のローカルな緩和・発熱カウンタ等を入れるなら記述
-        // 例: voltageV *= 0.999; // わずかな減衰
+        NetworkManager.get().serverTick(level); // デバウンス付き再構築
+        voltageV *= 0.999; // わずかな減衰
     }
 
     // ====== ライフサイクル ======
