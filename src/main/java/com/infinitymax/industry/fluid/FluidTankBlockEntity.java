@@ -108,8 +108,9 @@ public class FluidTankBlockEntity extends BlockEntity implements IPressureNode {
      */
     public void serverTick() {
         if (level == null || level.isClientSide) return;
+        NetworkManager.get().serverTick(level); // デバウンス付き再構築
         // ここでは何もしない（必要なら微小な圧力緩和などを書いてOK）
-        // 例: pressureKPa = Math.max(101.3, pressureKPa - 0.02);
+        pressureKPa = Math.max(101.3, pressureKPa - 0.02);
     }
 
     // ====== ライフサイクル ======
