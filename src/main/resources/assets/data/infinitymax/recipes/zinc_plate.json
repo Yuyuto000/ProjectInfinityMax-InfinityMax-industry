@@ -1,0 +1,14 @@
+{
+    "type": "infinitymax:machine_recipe",
+    "machine":"crusher",
+    "inputs": [
+        { "item": "minecraft:zinc_ingot", "count": 1 }
+    ],
+    "outputs": [
+        { "item":"infinitymax:zinc_plate","count":1}
+    ],
+    "ticks": 160,
+    "joules_per_tick": 120.0,
+    "fluid_inputs": [],
+    "fluid_outputs": []
+}
