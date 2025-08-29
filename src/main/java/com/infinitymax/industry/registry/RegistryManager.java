@@ -50,8 +50,21 @@ public final class RegistryManager {
     private static void registerItems() {
         // …あなたのリストを addItem("id") でずらっと
         addItem("iron_plate");
+        addItem("steel_ore");
         addItem("sheet_copper"); // copper plate
         addItem("steel_ingot");
+        addItem("aluminum_ore");
+        addItem("titanium_ore");
+        addItem("nickel_ore");
+        addItem("tin_ore");
+        addItem("lead_ore");
+        addItem("zinc_ore");
+        addItem("aluminum_ingot");
+        addItem("titanium_ingot");
+        addItem("nickel_ingot");
+        addItem("tin_ingot");
+        addItem("lead_ingot");
+        addItem("zinc_ingot");
         addItem("aluminum_plate");
         addItem("titanium_plate");
         addItem("nickel_plate");
@@ -120,6 +133,13 @@ public final class RegistryManager {
 
     // ========== ブロック ==========
     private static void registerBlocks() {
+        addSimpleBlock("aluminum_ore_block");
+        addSimpleBlock("titanium_ore_block");
+        addSimpleBlock("nickel_ore_block");
+        addSimpleBlock("tin_ore_block");
+        addSimpleBlock("lead_ore_block");
+        addSimpleBlock("zinc_ore_block");
+        addSimpleBlock("steel_ore_block");
         addSimpleBlock("steel_frame_block");
         addSimpleBlock("reinforced_concrete_block");
         addSimpleBlock("insulation_block");
@@ -207,19 +227,19 @@ public final class RegistryManager {
                     machineBlocks.toArray(new Block[0]))
                 .build(null);
 
-        MachineBlockEntity.TYPE = type;
-        ProjectInfinityMaxAPI.registerBlockEntity("machine_block_entity", type);
+            MachineBlockEntity.TYPE = type;
+            ProjectInfinityMaxAPI.registerBlockEntity("machine_block_entity", type);
 
         // ほか：FluidPipe / ElectricCable なども同様に…
         BlockEntityType<FluidPipeBlockEntity> fluidType =
                 BlockEntityType.Builder.of(FluidPipeBlockEntity::new, BLOCKS.get("fluid_pipe_block")).build(null);
-        FluidPipeBlockEntity.TYPE = fluidType;
-        ProjectInfinityMaxAPI.registerBlockEntity("fluid_pipe_entity", fluidType);
+            FluidPipeBlockEntity.TYPE = fluidType;
+            ProjectInfinityMaxAPI.registerBlockEntity("fluid_pipe_entity", fluidType);
 
         BlockEntityType<ElectricCableBlockEntity> cableType =
                 BlockEntityType.Builder.of(ElectricCableBlockEntity::new, BLOCKS.get("power_cable_block")).build(null);
-        ElectricCableBlockEntity.TYPE = cableType;
-        ProjectInfinityMaxAPI.registerBlockEntity("power_cable_entity", cableType);
+            ElectricCableBlockEntity.TYPE = cableType;
+            ProjectInfinityMaxAPI.registerBlockEntity("power_cable_entity", cableType);
 
         // Coal generator
         BlockEntityType<CoalGeneratorBlockEntity> coalGenType = 
