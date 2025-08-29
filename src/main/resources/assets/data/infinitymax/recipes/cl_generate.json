@@ -1,0 +1,18 @@
+{
+  "type": "infinitymax:machine_recipe",
+  "machine": "electrolyzer",
+  "inputs": [
+    { "item": "minecraft:sand", "count": 2 },
+    { "item": "minecraft:water_bucket", "count": 1 }
+  ],
+  "outputs": [],
+  "ticks": 400,
+  "joules_per_tick": 150.0,
+  "fluid_input": [
+    { "fluid": "minecraft:water", "amount": 1000 }
+  ],
+  "fluid_output": [
+    { "fluid": "infinitymax:chlorine_gas", "amount": 1000 },
+    { "fluid": "minecraft:water", "amount": 500 }
+  ]
+}

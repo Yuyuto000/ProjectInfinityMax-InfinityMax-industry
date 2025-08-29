@@ -1,0 +1,15 @@
+{
+  "type": "infinitymax:machine_recipe",
+  "machine": "electrolyzer",
+  "inputs": [],
+  "outputs": [],
+  "ticks": 300,
+  "joules_per_tick": 200.0,
+  "fluid_input": [
+    { "fluid": "minecraft:water", "amount": 1000 }
+  ],
+  "fluid_output": [
+    { "fluid": "infinitymax:hydrogen_gas", "amount": 500 },
+    { "fluid": "infinitymax:oxygen_gas", "amount": 500 }
+  ]
+}
