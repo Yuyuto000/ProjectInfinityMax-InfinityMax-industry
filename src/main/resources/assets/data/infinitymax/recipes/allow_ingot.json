@@ -4,7 +4,8 @@
     "input":[
         {"item":"infinitymax:zinc_plate","count":1},
         {"item":"infinitymax:nickel_plate","count":1},
-        {"item":"infinitymax:sheet_copper","count":2}
+        {"item":"infinitymax:sheet_copper","count":2},
+        {"item":"minecraft:redstone_dust","count":2}
     ],
     "output":[
         {"item":"infinitymax:allow_ingot","count":2}
