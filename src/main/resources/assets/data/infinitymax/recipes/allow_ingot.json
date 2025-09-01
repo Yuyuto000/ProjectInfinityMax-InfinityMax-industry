@@ -1,6 +1,6 @@
 {
     "type":"infinitymax:machine_recipe",
-    "machine":"mixer",
+    "machine":"furnace",
     "input":[
         {"item":"infinitymax:zinc_plate","count":1},
         {"item":"infinitymax:nickel_plate","count":1},
