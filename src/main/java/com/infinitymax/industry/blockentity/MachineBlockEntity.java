@@ -287,5 +287,7 @@ public class MachineBlockEntity extends BlockEntity implements MenuProvider {
     public int getProgressRequired() { return progressRequired; }
     public double getEnergyJ() { return energyJ; }
     public double getEnergyCapJ() { return energyCapJ; }
+    public void addEnergyJ(double amount) { energyJ = Math.min(energyCapJ, energyJ + amount); }
+    public void consumeEnergyJ(double amount) { energyJ = Math.max(0, energyJ - amount); }
     public FluidStack getTankStack(int idx) { return idx >= 0 && idx < tanks.length ? tanks[idx] : new FluidStack(net.minecraft.world.level.material.Fluids.EMPTY, 0); }
 }
