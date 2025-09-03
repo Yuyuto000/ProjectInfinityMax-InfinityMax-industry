@@ -98,20 +98,6 @@ public final class RegistryManager {
         addItem("bearing");
         addItem("circuit_board");
 
-        // 8) 武器・兵器（工業産物） → とりあえずプレースホルダ
-        addItem("rifle");
-        addItem("shotgun");
-        addItem("handgun");
-        addItem("machine_gun");
-        addItem("rocket_launcher");
-        addItem("gas_bomb");
-        addItem("flamethrower");
-        addItem("turret_module");
-        addItem("combat_drone_controller");
-        addItem("ammo_bullet");
-        addItem("ammo_grenade");
-        addItem("ammo_laser_cell");
-
         // 7) ロボット・自動化（コントローラ/ユニット）
         addItem("logistics_robot_core");
         addItem("assembler_robot_core");
